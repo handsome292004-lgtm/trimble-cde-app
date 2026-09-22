@@ -1,0 +1,247 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trimble Connect CDE</title>
+    <!-- Thư viện Trimble Connect Workspace API -->
+    <script src="https://connect-workspace-api.trimble.com/trimble-connect-workspace-api-v.1.0.0.js"></script>
+    <style>
+        :root {
+            --primary: #005f9e;
+            --primary-hover: #004573;
+            --bg: #f4f7f9;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --border: #d3d9df;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 16px;
+            background: var(--bg);
+            color: var(--text-main);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border: 1px solid var(--border);
+        }
+
+        h3 {
+            margin-top: 0;
+            color: var(--primary);
+            font-size: 15px;
+            font-weight: 700;
+            border-bottom: 2px solid #ebf0f5;
+            padding-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .status-box {
+            background: #f0f7ff;
+            padding: 12px;
+            border-left: 4px solid var(--primary);
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+            .status-box span {
+                font-weight: 600;
+                color: #111;
+                word-break: break-all;
+            }
+
+        .file-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: #fafbfc;
+            transition: all 0.2s ease;
+        }
+
+            .file-item:hover {
+                background: #f0f4f8;
+                border-color: var(--primary);
+                transform: translateX(4px);
+            }
+
+            .file-item a {
+                color: var(--primary);
+                text-decoration: none;
+                font-weight: 600;
+                margin-left: 10px;
+            }
+
+                .file-item a:hover {
+                    text-decoration: underline;
+                }
+
+        .input-group {
+            margin-top: 10px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            transition: border-color 0.2s;
+            margin-bottom: 12px;
+        }
+
+            input[type="text"]:focus {
+                outline: none;
+                border-color: var(--primary);
+                box-shadow: 0 0 0 3px rgba(0, 95, 158, 0.15);
+            }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+            button:hover {
+                background: var(--primary-hover);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+
+        .empty-state {
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 13px;
+            padding: 10px 0;
+        }
+
+        .icon {
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3>🏢 THÔNG TIN CẤU KIỆN</h3>
+        <div class="status-box">
+            <div>Mã GUID: <span id="guid">Đang chờ chọn...</span></div>
+        </div>
+
+        <h3>📁 HỒ SƠ ĐÍNH KÈM</h3>
+        <ul id="file-list" class="file-list">
+            <li class="empty-state">Vui lòng click chọn cấu kiện trên mô hình 3D</li>
+        </ul>
+
+        <h3>🔗 LIÊN KẾT HỒ SƠ MỚI</h3>
+        <div class="input-group">
+            <input type="text" id="pdf-url" placeholder="Dán đường dẫn URL file PDF vào đây...">
+            <button onclick="attachLink()">🚀 Cập Nhật Hồ Sơ</button>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = "http://localhost:8000";
+        let currentGuid = null;
+
+        window.onload = async () => {
+            try {
+                const api = await TrimbleConnectWorkspace.connect(window.parent, (event, args) => {
+                    if (event === "buildingModel.selectedObjectsChanged" && args.length > 0) {
+                        currentGuid = args[0].id;
+                        document.getElementById("guid").innerText = currentGuid;
+                        loadFiles(currentGuid);
+                    } else if (args.length === 0) {
+                        currentGuid = null;
+                        document.getElementById("guid").innerText = "Đang chờ chọn...";
+                        document.getElementById("file-list").innerHTML = "<li class='empty-state'>Vui lòng click chọn cấu kiện trên mô hình 3D</li>";
+                    }
+                }, 30000);
+            } catch (err) {
+                console.error("Không thể khởi tạo Trimble Workspace API", err);
+            }
+        };
+
+        async function loadFiles(guid) {
+            document.getElementById("file-list").innerHTML = "<li class='empty-state'>⏳ Đang tải dữ liệu...</li>";
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/docs/${guid}`);
+                const data = await res.json();
+                const list = document.getElementById("file-list");
+                list.innerHTML = "";
+
+                if (data.urls.length === 0) {
+                    list.innerHTML = "<li class='empty-state'>Chưa có hồ sơ nào được gắn vào cấu kiện này.</li>";
+                    return;
+                }
+
+                data.urls.forEach((url, i) => {
+                    list.innerHTML += `
+                        <li class="file-item">
+                            <span class="icon">📄</span>
+                            <a href="${url}" target="_blank">Biên bản / Hồ sơ nghiệm thu #${i+1}</a>
+                        </li>`;
+                });
+            } catch (err) {
+                document.getElementById("file-list").innerHTML = "<li class='empty-state' style='color:red'>⚠️ Lỗi kết nối Server Python!</li>";
+            }
+        }
+
+        async function attachLink() {
+            const url = document.getElementById("pdf-url").value.trim();
+            if (!currentGuid || !url) {
+                return alert("Vui lòng click chọn cấu kiện trên mô hình và dán link hợp lệ!");
+            }
+
+            try {
+                await fetch(`${BACKEND_URL}/api/docs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ guid: currentGuid, url: url })
+                });
+
+                document.getElementById("pdf-url").value = "";
+                loadFiles(currentGuid);
+            } catch(err) {
+                alert("⚠️ Lỗi! Không thể kết nối tới Server Python.");
+            }
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+</head>
+<body>
+
+</body>
+</html>
